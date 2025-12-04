@@ -1,0 +1,422 @@
+
+import React, { useState } from 'react';
+import { format, parseISO } from 'date-fns';
+import { Calendar, Users, CreditCard, ChevronDown, ChevronUp, User, MapPin, Plus, Pencil, Download, Image, FileText, CheckSquare, Square, X, Trash2 } from 'lucide-react'; // Added Trash2
+import { ProductionEvent, TechnicianShift, StaffMember } from '../types';
+import html2canvas from 'html2canvas';
+
+interface ProductionViewProps {
+  events: ProductionEvent[];
+  onCreateEvent: () => void;
+  onEditEvent: (event: ProductionEvent) => void;
+  onDeleteEvent: (eventId: string) => void; // New prop for deleting events
+  staffList: StaffMember[];
+}
+
+const RoleBadge = ({ role }: { role: string }) => {
+  let colorClass = 'bg-zinc-800 text-zinc-400 border-zinc-700';
+  
+  // Re-mapping colors to Corporate/Gold scale
+  // Core Technical Roles -> Gold/Yellow
+  if (role.toLowerCase().includes('camara') || role.toLowerCase().includes('tecnico') || role.toLowerCase().includes('realizador')) {
+    colorClass = 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30';
+  } 
+  // Leadership Roles -> White/Strong
+  else if (role.toLowerCase().includes('jefe') || role.toLowerCase().includes('produccion')) {
+    colorClass = 'bg-zinc-100 text-zinc-900 border-zinc-300 font-bold';
+  } 
+  // Support Roles -> Zinc/Gray
+  else if (role.toLowerCase().includes('auxiliar') || role.toLowerCase().includes('asistente')) {
+    colorClass = 'bg-zinc-800 text-zinc-300 border-zinc-600';
+  }
+
+  return (
+    <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${colorClass} uppercase tracking-wider`}>
+      {role}
+    </span>
+  );
+};
+
+// Column Definitions for Export
+const EXPORT_COLUMNS = [
+    { key: 'role', label: 'Puesto' },
+    { key: 'personName', label: 'Nombre Completo' },
+    { key: 'dni', label: 'DNI' },
+    { key: 'phone', label: 'Teléfono' },
+    { key: 'email', label: 'Email' },
+    { key: 'schedule', label: 'Horario/Jornada' },
+    { key: 'paymentType', label: 'Tipo Pago' },
+    { key: 'socialSecurityNumber', label: 'Seguridad Social' },
+    { key: 'bankAccount', label: 'IBAN / Cuenta' },
+    { key: 'province', label: 'Provincia' },
+    { key: 'notes', label: 'Notas' },
+    { key: 'agreedSalary', label: 'Tarifa' },
+];
+
+const EventCard: React.FC<{ 
+    event: ProductionEvent; 
+    onEdit: (e: ProductionEvent) => void;
+    onExportClick: (e: ProductionEvent) => void; 
+    onDelete: (eventId: string) => void; // New prop for deleting an event
+}> = ({ event, onEdit, onExportClick, onDelete }) => { // Destructure onDelete
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const totalCost = event.shifts.reduce((sum, shift) => sum + (shift.totalInvoiceAmount || shift.agreedSalary || 0), 0);
+  const staffCount = event.shifts.length;
+
+  return (
+    <div className={`mb-4 rounded-lg border bg-zinc-900 overflow-hidden transition-all duration-300 ${isExpanded ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/10' : 'border-zinc-800 hover:border-zinc-700'}`}>
+        
+        {/* Header / Summary */}
+        <div 
+          className="p-5 cursor-pointer flex items-center justify-between"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center justify-center bg-black border border-zinc-800 w-16 h-16 rounded-lg">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">{format(parseISO(event.date), 'MMM')}</span>
+              <span className="text-2xl font-bold text-white font-mono">{format(parseISO(event.date), 'dd')}</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white tracking-tight uppercase">{event.title}</h3>
+              <div className="flex items-center gap-4 text-xs text-zinc-400 mt-2">
+                <div className="flex items-center gap-1.5">
+                  <Users size={14} className="text-yellow-500" />
+                  <span>{staffCount} PAX</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <MapPin size={14} className="text-yellow-500" />
+                  <span>LOCATION</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-8">
+            <div className="text-right hidden sm:block">
+              <span className="block text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Presupuesto</span>
+              <span className="font-mono text-white font-bold text-lg">{totalCost.toFixed(2)}€</span>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onExportClick(event); }}
+                    className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-white transition-colors"
+                    title="Exportar Citación"
+                >
+                   <Download size={18} />
+                </button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onEdit(event); }}
+                    className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-yellow-500 transition-colors"
+                    title="Editar Evento"
+                >
+                    <Pencil size={18} />
+                </button>
+                {/* Delete Button */}
+                <button 
+                    onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if(confirm(`¿Estás seguro de que quieres eliminar el evento "${event.title}"? Esta acción no se puede deshacer.`)) {
+                            onDelete(event.id); 
+                        }
+                    }}
+                    className="p-2 hover:bg-zinc-800 rounded-full text-zinc-500 hover:text-red-500 transition-colors"
+                    title="Eliminar Evento"
+                >
+                    <Trash2 size={18} />
+                </button>
+                <div className="text-zinc-500">
+                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded Call Sheet */}
+        {isExpanded && (
+          <div className="border-t border-zinc-800 bg-black/30 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest flex items-center gap-2">
+                <CreditCard size={14} /> Hoja de Producción
+              </h4>
+              <div className="text-[10px] text-zinc-600 font-mono">REF: {event.id.toUpperCase()}</div>
+            </div>
+
+            <div className="grid gap-2">
+              {event.shifts.map((shift) => (
+                <div key={shift.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-colors">
+                  <div className="flex items-center gap-3 mb-2 sm:mb-0">
+                    <div className="w-8 h-8 rounded-full bg-black border border-zinc-800 flex items-center justify-center text-zinc-400">
+                      <User size={14} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-zinc-200">{shift.personName}</span>
+                        <RoleBadge role={shift.role} />
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono mt-0.5 uppercase">DNI: {shift.dni}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6 text-xs">
+                    <div className="flex flex-col items-end min-w-[80px]">
+                      <span className="text-zinc-600 text-[10px] uppercase">Jornada</span>
+                      <span className="text-zinc-300 font-medium">{shift.schedule}</span>
+                    </div>
+                    <div className="flex flex-col items-end min-w-[100px]">
+                      <span className="text-zinc-600 text-[10px] uppercase">Estado</span>
+                      <span className={`font-medium ${shift.paymentType === 'Alta Seg. Social' ? 'text-white' : 'text-zinc-400'}`}>
+                        {shift.paymentType}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end min-w-[80px] text-right">
+                      <span className="text-zinc-600 text-[10px] uppercase">Tarifa</span>
+                      <span className="font-mono text-yellow-500">{shift.agreedSalary}€</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+  );
+};
+
+export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreateEvent, onEditEvent, onDeleteEvent, staffList }) => { // Destructure onDeleteEvent
+  const sortedEvents = [...events].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportingEvent, setExportingEvent] = useState<ProductionEvent | null>(null);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(['role', 'personName', 'dni', 'schedule']);
+  const [exportFormat, setExportFormat] = useState<'PNG' | 'PDF'>('PNG');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleExportClick = (event: ProductionEvent) => {
+      setExportingEvent(event);
+      setIsExportModalOpen(true);
+  };
+
+  const toggleColumn = (key: string) => {
+      if (selectedColumns.includes(key)) {
+          setSelectedColumns(selectedColumns.filter(c => c !== key));
+      } else {
+          setSelectedColumns([...selectedColumns, key]);
+      }
+  };
+
+  const getStaffDetail = (shift: TechnicianShift, key: string): string => {
+      if (key === 'role' || key === 'personName' || key === 'dni' || key === 'paymentType' || key === 'schedule' || key === 'agreedSalary' || key === 'notes') {
+          // @ts-ignore
+          return shift[key] ? String(shift[key]) : '';
+      }
+      const staffMember = staffList.find(s => s.dni === shift.dni);
+      if (staffMember) {
+           // @ts-ignore
+           return staffMember[key] ? String(staffMember[key]) : '';
+      }
+      return '';
+  };
+
+  const performExport = async () => {
+      if (!exportingEvent) return;
+      setIsGenerating(true);
+
+      const element = document.getElementById('export-table-container');
+      if (element) {
+          try {
+              element.style.display = 'block'; 
+              const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff' });
+              const imgData = canvas.toDataURL('image/png');
+              const fileName = `CITACION_${exportingEvent.title.replace(/\s+/g, '_').toUpperCase()}`;
+
+              if (exportFormat === 'PNG') {
+                  const link = document.createElement('a');
+                  link.href = imgData;
+                  link.download = `${fileName}.png`;
+                  link.click();
+              } else {
+                  // @ts-ignore
+                  if (window.jspdf && window.jspdf.jsPDF) {
+                    // @ts-ignore
+                    const pdf = new window.jspdf.jsPDF({
+                        orientation: 'landscape',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+                    
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                    
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    pdf.save(`${fileName}.pdf`);
+                  } else {
+                      alert('Librería PDF no cargada.');
+                  }
+              }
+              element.style.display = 'none';
+          } catch (err) {
+              console.error("Export failed:", err);
+              alert("Error al generar la exportación.");
+          }
+      }
+      setIsGenerating(false);
+      setIsExportModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
+        <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3 uppercase">
+          <Calendar className="text-yellow-500" size={28} />
+          Eventos {/* Changed from Calendario to Eventos */}
+        </h2>
+        
+        <button 
+          onClick={onCreateEvent}
+          className="bg-yellow-500 hover:bg-yellow-400 text-black border border-yellow-500 px-6 py-2.5 rounded text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-yellow-900/20 uppercase tracking-wide"
+        >
+          <Plus size={18} /> Nuevo Evento
+        </button>
+      </div>
+      
+      <div className="grid gap-4">
+        {sortedEvents.map(event => (
+          <EventCard 
+            key={event.id} 
+            event={event} 
+            onEdit={onEditEvent}
+            onExportClick={handleExportClick} 
+            onDelete={onDeleteEvent} // Pass the delete handler
+          />
+        ))}
+      </div>
+
+      {/* EXPORT MODAL */}
+      {isExportModalOpen && exportingEvent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-lg w-full max-w-lg shadow-2xl">
+                <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
+                    <h3 className="font-bold text-white flex items-center gap-2 uppercase tracking-wide"><Download size={18} className="text-yellow-500"/> Exportar Citación</h3>
+                    <button onClick={() => setIsExportModalOpen(false)}><X size={20} className="text-zinc-500 hover:text-white"/></button>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                    {/* Format */}
+                    <div>
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 block">Formato de salida</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button 
+                                onClick={() => setExportFormat('PNG')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded border transition-all ${exportFormat === 'PNG' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+                            >
+                                <Image size={24} />
+                                <span className="font-bold text-xs uppercase">Imagen (PNG)</span>
+                            </button>
+                            <button 
+                                onClick={() => setExportFormat('PDF')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded border transition-all ${exportFormat === 'PDF' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+                            >
+                                <FileText size={24} />
+                                <span className="font-bold text-xs uppercase">Documento (PDF)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Columns */}
+                    <div>
+                        <div className="flex justify-between items-center mb-3">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Datos a incluir</label>
+                            <div className="flex gap-2 text-xs">
+                                <button onClick={() => setSelectedColumns(EXPORT_COLUMNS.map(c => c.key))} className="text-yellow-500 hover:underline font-medium">Todas</button>
+                                <button onClick={() => setSelectedColumns(['role', 'personName', 'dni', 'schedule'])} className="text-zinc-400 hover:text-white">Reset</button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 bg-black rounded border border-zinc-800 custom-scrollbar">
+                            {EXPORT_COLUMNS.map(col => (
+                                <div 
+                                    key={col.key} 
+                                    onClick={() => toggleColumn(col.key)}
+                                    className={`flex items-center gap-2 p-2 rounded cursor-pointer select-none text-xs font-medium transition-colors ${selectedColumns.includes(col.key) ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:bg-zinc-900'}`}
+                                >
+                                    {selectedColumns.includes(col.key) ? <CheckSquare size={14} className="text-yellow-500" /> : <Square size={14} />}
+                                    {col.label}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-5 border-t border-zinc-800 bg-zinc-900 flex justify-end gap-3">
+                    <button onClick={() => setIsExportModalOpen(false)} className="px-4 py-2 text-zinc-400 hover:text-white text-xs font-bold uppercase">Cancelar</button>
+                    <button 
+                        onClick={performExport}
+                        disabled={isGenerating || selectedColumns.length === 0}
+                        className="px-6 py-2 bg-yellow-500 text-black font-bold rounded text-xs hover:bg-yellow-400 disabled:opacity-50 flex items-center gap-2 uppercase tracking-wide"
+                    >
+                        {isGenerating ? 'Generando...' : 'Descargar'}
+                    </button>
+                </div>
+            </div>
+          </div>
+      )}
+
+      {/* HIDDEN DYNAMIC TABLE FOR EXPORT */}
+      {exportingEvent && (
+        <div 
+            id="export-table-container"
+            style={{ 
+                display: 'none', 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                width: '1200px', 
+                zIndex: -1000,
+                background: 'white',
+                fontFamily: 'Arial, sans-serif',
+                color: '#000000'
+            }}
+        >
+            <div style={{ backgroundColor: '#000000', padding: '30px 40px', borderBottom: '4px solid #EAB308', color: '#ffffff' }}>
+                <h1 style={{ margin: 0, fontSize: '32px', fontWeight: 'bold', color: '#ffffff', textTransform: 'uppercase' }}>
+                    {exportingEvent.title}
+                </h1>
+                <p style={{ fontSize: '18px', marginTop: '10px', color: '#EAB308', fontWeight: 'bold' }}>FECHA: {exportingEvent.date}</p>
+            </div>
+            
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+                <thead>
+                    <tr style={{ backgroundColor: '#f0f0f0' }}>
+                        {selectedColumns.map(colKey => {
+                            const def = EXPORT_COLUMNS.find(c => c.key === colKey);
+                            return (
+                                <th key={colKey} style={{ padding: '12px', border: '1px solid #ccc', fontSize: '12px', textAlign: 'left', color: '#000000', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                                    {def?.label}
+                                </th>
+                            );
+                        })}
+                    </tr>
+                </thead>
+                <tbody>
+                    {exportingEvent.shifts.map((shift, i) => (
+                        <tr key={i}>
+                            {selectedColumns.map(colKey => (
+                                <td key={colKey} style={{ padding: '10px', border: '1px solid #eee', fontSize: '12px', color: '#000000' }}>
+                                    {getStaffDetail(shift, colKey)}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <div style={{ padding: '20px', fontSize: '10px', color: '#666', borderTop: '1px solid #ccc', marginTop: '30px', textAlign: 'right', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                ELITEVISION PRODUCCIÓN
+            </div>
+        </div>
+      )}
+    </div>
+  );
+};

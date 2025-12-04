@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ELITEVISION MANAGER - Cloud Edition</title>
+    
+    <!-- CSS Framework (Tailwind via CDN for simplicity) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+        background-color: #000000; /* Pure Black */
+        color: #e4e4e7; /* zinc-200 */
+      }
+      /* Scrollbar Personalizado */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: #000000; }
+      ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+      
+      /* Animaciones */
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "vite": "https://aistudiocdn.com/vite@^7.2.6",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
