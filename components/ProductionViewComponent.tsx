@@ -244,8 +244,8 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
                     ssCell = 'No';
                 }
 
-                const salaryCell = shift.agreedSalary ? `${shift.agreedSalary} €` : '-';
-                
+                const salaryCell = shift.agreedSalary ? `${shift.agreedSalary.toFixed(2)} €` : '-'; // Fixed toFixed(2)
+
                 // Combine notes and invoice info
                 const invoiceInfo = shift.invoiceNumber ? `Llegó Fact. ${shift.invoiceNumber}` : '';
                 const totalInvoiceInfo = shift.totalInvoiceAmount ? `(Total ${shift.totalInvoiceAmount.toFixed(2)}€)` : '';
@@ -257,7 +257,7 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
                     shift.dni,
                     ssCell,
                     salaryCell,
-                    combinedNotes || shift.paymentType,
+                    combinedNotes || shift.paymentType, // Fallback to paymentType if no other notes
                     shift.schedule
                 ]);
             });
@@ -278,6 +278,32 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
             { wch: 40 }, // Observacion
             { wch: 15 }  // Jornada
         ];
+
+        // Apply some basic styling as seen in the image
+        // Iterate through rows to find event titles and apply bold
+        for (let R = 0; R < rows.length; ++R) {
+            if (rows[R].length === 1 && typeof rows[R][0] === 'string' && rows[R][0].includes('(') && rows[R][0].includes(')')) {
+                // This is an event title row (e.g., "Event Title (Date)")
+                const cellRef = XLSX.utils.encode_cell({ r: R, c: 0 });
+                if (!ws[cellRef]) ws[cellRef] = { v: rows[R][0] };
+                ws[cellRef].s = { font: { bold: true, sz: 14 }, alignment: { horizontal: "left" } };
+                // Merge cells A to G for the title
+                const merge = { s: { r: R, c: 0 }, e: { r: R, c: 6 } };
+                if (!ws['!merges']) ws['!merges'] = [];
+                ws['!merges'].push(merge);
+
+                // Assuming the headers are always two rows below the title
+                const headerRowIndex = R + 2;
+                if (rows[headerRowIndex] && rows[headerRowIndex][0] === 'Puesto') {
+                    for (let C = 0; C < rows[headerRowIndex].length; ++C) {
+                        const headerCellRef = XLSX.utils.encode_cell({ r: headerRowIndex, c: C });
+                        if (!ws[headerCellRef]) ws[headerCellRef] = { v: rows[headerRowIndex][C] };
+                        ws[headerCellRef].s = { font: { bold: true }, fill: { fgColor: { rgb: "FFEEEEEE" } } }; // Light gray background for headers
+                    }
+                }
+                R += 1; // Skip the empty row after title for the next iteration (optimization)
+            }
+        }
 
         XLSX.utils.book_append_sheet(wb, ws, "Producción Completa");
         XLSX.writeFile(wb, `EliteVision_Backup_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
@@ -340,10 +366,10 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
       <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
         <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3 uppercase">
           <Calendar className="text-yellow-500" size={28} />
-          Eventos
+          Eventos {/* Changed from Calendario to Eventos */}
         </h2>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2"> {/* Group buttons in a flex container */}
             <button 
                 onClick={exportAllToExcel}
                 className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 px-4 py-2.5 rounded text-xs font-bold transition-all flex items-center gap-2 uppercase tracking-wide"

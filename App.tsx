@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
@@ -147,7 +146,7 @@ function App() {
         staff: staffRef.current,
         users: usersRef.current,
         timestamp: new Date().toISOString(),
-        version: '3.0'
+        version: '3.1 Beta' // Updated version for auto-save
       };
       
       try {
