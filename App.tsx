@@ -320,7 +320,7 @@ function App() {
 
   const uploadLocalDataToCloud = async () => {
       if (!isCloudConfigured || !dbInstance) return;
-      if (!confirm("Esto sobrescribirá los datos en la nube con los datos locales actuales de este navegador. ¿Continuar?")) return;
+      if (!confirm("Esto sobrescribirá los datos en la nube con los datos locales actuales de este navegador (Eventos, Personal y Usuarios). ¿Continuar?")) return;
 
       const batch = writeBatch(dbInstance);
       
@@ -344,8 +344,35 @@ function App() {
           batch.set(ref, u);
       });
 
-      await batch.commit();
-      alert("Sincronización completada: Datos locales subidos a la nube.");
+      try {
+          await batch.commit();
+          alert("Sincronización completada: Datos locales subidos a la nube.");
+      } catch (error) {
+          console.error("Error al subir datos locales a la nube:", error);
+          alert("Error al subir datos locales a la nube. Revisa la consola para más detalles.");
+      }
+  };
+
+  // NEW: Function to upload only local staff data to cloud
+  const uploadLocalStaffToCloud = async () => {
+      if (!isCloudConfigured || !dbInstance) return;
+      if (!confirm("Esto sobrescribirá la base de datos de PERSONAL en la nube con los datos locales actuales de este navegador. ¿Continuar?")) return;
+
+      const batch = writeBatch(dbInstance);
+      const localStaff = JSON.parse(localStorage.getItem('elitevision_staff') || '[]');
+
+      localStaff.forEach((s: StaffMember) => {
+          const ref = doc(dbInstance, 'staff', s.id);
+          batch.set(ref, s);
+      });
+
+      try {
+          await batch.commit();
+          alert("Sincronización de personal completada: Datos locales subidos a la nube.");
+      } catch (error) {
+          console.error("Error al subir personal local a la nube:", error);
+          alert("Error al subir personal local a la nube. Revisa la consola para más detalles.");
+      }
   };
 
   const uploadMockDataToCloud = async () => {
@@ -370,8 +397,13 @@ function App() {
           batch.set(ref, u);
       });
 
-      await batch.commit();
-      alert("Sincronización completada: Datos de ejemplo cargados a la nube.");
+      try {
+          await batch.commit();
+          alert("Sincronización completada: Datos de ejemplo cargados a la nube.");
+      } catch (error) {
+          console.error("Error al cargar datos de ejemplo a la nube:", error);
+          alert("Error al cargar datos de ejemplo a la nube. Revisa la consola para más detalles.");
+      }
   };
 
   // --- UI STATE ---
@@ -620,11 +652,19 @@ function App() {
                                     </div>
                                 </div>
                                 <div className="flex flex-col gap-4">
+                                    {/* Existing Upload All Data Button */}
                                     <button 
                                         onClick={uploadLocalDataToCloud}
                                         className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700 justify-center"
                                     >
-                                        <Upload size={16} /> Subir datos locales a la nube
+                                        <Upload size={16} /> Subir todos los datos locales a la nube
+                                    </button>
+                                    {/* NEW: Upload Local Staff Data Button */}
+                                    <button 
+                                        onClick={uploadLocalStaffToCloud}
+                                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700 justify-center"
+                                    >
+                                        <Upload size={16} /> Subir Personal Local a la Nube
                                     </button>
                                     <button 
                                         onClick={uploadMockDataToCloud}
