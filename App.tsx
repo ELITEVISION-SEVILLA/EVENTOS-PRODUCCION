@@ -17,7 +17,8 @@ import {
   Upload,
   LogOut,
   Shield,
-  HardDrive
+  HardDrive,
+  RefreshCw // Added for the new button
 } from 'lucide-react';
 
 // Imported with .tsx extension to fix module resolution issues in Vercel/CI
@@ -29,6 +30,7 @@ import { CreateEventModal } from './components/CreateEventModalComponent.tsx';
 import { LoginComponent } from './components/LoginComponent.tsx';
 import { UsersView } from './components/UsersViewComponent.tsx';
 
+// Import mock data directly for the seeding function
 import { EVENTS_DATA, STAFF_DATA, USERS_DATA } from './mockData';
 import { ProductionEvent, StaffMember, AppUser } from './types';
 
@@ -316,11 +318,11 @@ function App() {
 
   const uploadLocalDataToCloud = async () => {
       if (!isCloudConfigured || !dbInstance) return;
-      if (!confirm("Esto sobrescribirá los datos en la nube con los datos locales actuales. ¿Continuar?")) return;
+      if (!confirm("Esto sobrescribirá los datos en la nube con los datos locales actuales de este navegador. ¿Continuar?")) return;
 
       const batch = writeBatch(dbInstance);
       
-      // Load local raw data
+      // Load local raw data from localStorage
       const localEvents = JSON.parse(localStorage.getItem('elitevision_events') || '[]');
       const localStaff = JSON.parse(localStorage.getItem('elitevision_staff') || '[]');
       const localUsers = JSON.parse(localStorage.getItem('elitevision_users') || '[]');
@@ -342,6 +344,32 @@ function App() {
 
       await batch.commit();
       alert("Sincronización completada: Datos locales subidos a la nube.");
+  };
+
+  const uploadMockDataToCloud = async () => {
+      if (!isCloudConfigured || !dbInstance) return;
+      if (!confirm("¡Atención! Esto sobrescribirá *todos* los datos de Eventos, Personal y Usuarios en la nube con los datos de ejemplo predeterminados. ¿Continuar?")) return;
+
+      const batch = writeBatch(dbInstance);
+      
+      // Use the mock data directly from the imports
+      EVENTS_DATA.forEach((e: ProductionEvent) => {
+          const ref = doc(dbInstance, 'events', e.id);
+          batch.set(ref, e);
+      });
+
+      STAFF_DATA.forEach((s: StaffMember) => {
+          const ref = doc(dbInstance, 'staff', s.id);
+          batch.set(ref, s);
+      });
+
+      USERS_DATA.forEach((u: AppUser) => {
+          const ref = doc(dbInstance, 'users', u.id);
+          batch.set(ref, u);
+      });
+
+      await batch.commit();
+      alert("Sincronización completada: Datos de ejemplo cargados a la nube.");
   };
 
   // --- UI STATE ---
@@ -589,18 +617,24 @@ function App() {
                                         <div className="text-sm text-zinc-400">Tus datos se guardan en la nube en tiempo real.</div>
                                     </div>
                                 </div>
-                                <div className="flex gap-4">
+                                <div className="flex flex-col gap-4">
                                     <button 
                                         onClick={uploadLocalDataToCloud}
-                                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700"
+                                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700 justify-center"
                                     >
                                         <Upload size={16} /> Subir datos locales a la nube
                                     </button>
                                     <button 
-                                        onClick={disconnectCloud}
-                                        className="flex items-center gap-2 px-4 py-2 bg-red-950/20 hover:bg-red-950/30 text-red-400 rounded text-sm transition-colors border border-red-900/30"
+                                        onClick={uploadMockDataToCloud}
+                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-950/20 hover:bg-yellow-950/30 text-yellow-400 rounded text-sm transition-colors border border-yellow-900/30 justify-center"
                                     >
-                                        <Trash2 size={16} /> Desconectar
+                                        <RefreshCw size={16} /> Cargar datos de ejemplo a la nube
+                                    </button>
+                                    <button 
+                                        onClick={disconnectCloud}
+                                        className="flex items-center gap-2 px-4 py-2 bg-red-950/20 hover:bg-red-950/30 text-red-400 rounded text-sm transition-colors border border-red-900/30 justify-center"
+                                    >
+                                        <Trash2 size={16} /> Desconectar de la nube
                                     </button>
                                 </div>
                             </div>

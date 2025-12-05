@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Calendar, Users, CreditCard, ChevronDown, ChevronUp, User, MapPin, Plus, Pencil, Download, Image, FileText, CheckSquare, Square, X, Trash2, Sheet } from 'lucide-react';
 import { ProductionEvent, TechnicianShift, StaffMember } from '../types';
 import html2canvas from 'html2canvas';
+// Corrected import statement to import all exports as XLSX object
 import * as XLSX from 'xlsx';
 
 interface ProductionViewProps {
@@ -205,14 +205,27 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
   };
 
   const getStaffDetail = (shift: TechnicianShift, key: string): string => {
-      if (key === 'role' || key === 'personName' || key === 'dni' || key === 'paymentType' || key === 'schedule' || key === 'agreedSalary' || key === 'notes') {
-          // @ts-ignore
-          return shift[key] ? String(shift[key]) : '';
+      // Propiedades directas de TechnicianShift
+      switch (key) {
+          case 'role': return shift.role || '';
+          case 'personName': return shift.personName || '';
+          case 'dni': return shift.dni || '';
+          case 'schedule': return shift.schedule || '';
+          case 'paymentType': return shift.paymentType || '';
+          case 'notes': return shift.notes || '';
+          case 'agreedSalary': return shift.agreedSalary !== undefined ? shift.agreedSalary.toFixed(2) : '';
       }
+
+      // Propiedades que provienen de la búsqueda en StaffMember
       const staffMember = staffList.find(s => s.dni === shift.dni);
       if (staffMember) {
-           // @ts-ignore
-           return staffMember[key] ? String(staffMember[key]) : '';
+          switch (key) {
+              case 'socialSecurityNumber': return staffMember.socialSecurityNumber || '';
+              case 'phone': return staffMember.phone || '';
+              case 'email': return staffMember.email || '';
+              case 'bankAccount': return staffMember.bankAccount || '';
+              case 'province': return staffMember.province || '';
+          }
       }
       return '';
   };
@@ -237,9 +250,15 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
 
             // Data Rows
             event.shifts.forEach(shift => {
+                const staffMemberForShift = staffList.find(s => s.dni === shift.dni);
+
                 let ssCell = '-';
                 if (shift.paymentType === 'Alta Seg. Social') {
-                    ssCell = shift.socialSecurityNumber ? `Si (${shift.socialSecurityNumber})` : 'Si';
+                    if (staffMemberForShift?.socialSecurityNumber) {
+                        ssCell = `Sí (${staffMemberForShift.socialSecurityNumber})`;
+                    } else {
+                        ssCell = 'Sí (Nº SS pendiente)';
+                    }
                 } else if (shift.paymentType === 'Cooperativa') {
                     ssCell = 'No';
                 }
@@ -283,10 +302,11 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
         // Iterate through rows to find event titles and apply bold
         for (let R = 0; R < rows.length; ++R) {
             if (rows[R].length === 1 && typeof rows[R][0] === 'string' && rows[R][0].includes('(') && rows[R][0].includes(')')) {
-                // This is an event title row (e.g., "Event Title (Date)")
                 const cellRef = XLSX.utils.encode_cell({ r: R, c: 0 });
+                // Ensure ws[cellRef] is a CellObject before accessing .s
                 if (!ws[cellRef]) ws[cellRef] = { v: rows[R][0] };
-                ws[cellRef].s = { font: { bold: true, sz: 14 }, alignment: { horizontal: "left" } };
+                // Add type assertion to treat ws[cellRef] as a CellObject
+                (ws[cellRef] as XLSX.CellObject).s = { font: { bold: true, sz: 14 }, alignment: { horizontal: "left" } };
                 // Merge cells A to G for the title
                 const merge = { s: { r: R, c: 0 }, e: { r: R, c: 6 } };
                 if (!ws['!merges']) ws['!merges'] = [];
@@ -297,8 +317,10 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
                 if (rows[headerRowIndex] && rows[headerRowIndex][0] === 'Puesto') {
                     for (let C = 0; C < rows[headerRowIndex].length; ++C) {
                         const headerCellRef = XLSX.utils.encode_cell({ r: headerRowIndex, c: C });
+                        // Ensure ws[headerCellRef] is a CellObject before accessing .s
                         if (!ws[headerCellRef]) ws[headerCellRef] = { v: rows[headerRowIndex][C] };
-                        ws[headerCellRef].s = { font: { bold: true }, fill: { fgColor: { rgb: "FFEEEEEE" } } }; // Light gray background for headers
+                        // Add type assertion to treat ws[headerCellRef] as a CellObject
+                        (ws[headerCellRef] as XLSX.CellObject).s = { font: { bold: true }, fill: { fgColor: { rgb: "FFEEEEEE" } } }; // Light gray background for headers
                     }
                 }
                 R += 1; // Skip the empty row after title for the next iteration (optimization)
