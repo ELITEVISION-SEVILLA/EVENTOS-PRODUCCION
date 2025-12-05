@@ -612,9 +612,12 @@ function App() {
                                 <textarea 
                                     value={firebaseConfigInput}
                                     onChange={(e) => setFirebaseConfigInput(e.target.value)}
-                                    placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "..." }'
+                                    placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "storageBucket": "...", "messagingSenderId": "...", "appId": "..." }'
                                     className="w-full h-48 bg-black border border-zinc-800 rounded p-3 font-mono text-xs text-zinc-300 focus:border-yellow-500 focus:outline-none"
                                 />
+                                <p className="text-xs text-zinc-600 mt-1">
+                                    <span className="font-bold text-yellow-500">Importante:</span> Pega solo el objeto JSON (lo que está entre llaves <code className="bg-zinc-800 text-zinc-300 px-1 rounded">{'{...}'}</code>), no la declaración de la variable <code className="bg-zinc-800 text-zinc-300 px-1 rounded">const firebaseConfig =</code>.
+                                </p>
                                 <button 
                                     onClick={saveCloudConfig}
                                     className="w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded transition-colors flex items-center justify-center gap-2 uppercase tracking-wide text-sm"
