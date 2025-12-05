@@ -17,8 +17,9 @@ import {
   Upload,
   LogOut,
   Shield,
+  RefreshCw,
   HardDrive,
-  RefreshCw // Added for the new button
+  FileUp // New icon for Excel upload
 } from 'lucide-react';
 
 // Imported with .tsx extension to fix module resolution issues in Vercel/CI
@@ -31,13 +32,15 @@ import { LoginComponent } from './components/LoginComponent.tsx';
 import { UsersView } from './components/UsersViewComponent.tsx';
 
 // Import mock data directly for the seeding function
-// Fix: Added EVENTS_DATA import
 import { EVENTS_DATA, STAFF_DATA, USERS_DATA } from './mockData';
-import { ProductionEvent, StaffMember, AppUser } from './types';
+import { ProductionEvent, StaffMember, AppUser, generateId, PaymentType } from './types';
 
 // Firebase Imports
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+
+// XLSX import
+import * as XLSX from 'xlsx';
 
 type View = 'PRODUCTION' | 'ADMIN' | 'STATS' | 'STAFF' | 'SETTINGS' | 'USERS';
 
@@ -62,6 +65,11 @@ function App() {
   // Auto-Save State
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   
+  // Excel Upload State
+  const [selectedExcelFile, setSelectedExcelFile] = useState<File | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadFileMessage, setUploadFileMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
+
   // Refs for Auto-Save (to access current state inside interval)
   const eventsRef = useRef(events);
   const staffRef = useRef(staff);
@@ -353,7 +361,6 @@ function App() {
       }
   };
 
-  // NEW: Function to upload only local staff data to cloud
   const uploadLocalStaffToCloud = async () => {
       if (!isCloudConfigured || !dbInstance) return;
       if (!confirm("Esto sobrescribirá la base de datos de PERSONAL en la nube con los datos locales actuales de este navegador. ¿Continuar?")) return;
@@ -405,6 +412,148 @@ function App() {
           alert("Error al cargar datos de ejemplo a la nube. Revisa la consola para más detalles.");
       }
   };
+
+  // --- NEW: EXCEL UPLOAD LOGIC ---
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files && event.target.files[0]) {
+          setSelectedExcelFile(event.target.files[0]);
+          setUploadFileMessage(null); // Clear previous messages
+      }
+  };
+
+  const parseExcelStaffFile = async (file: File): Promise<StaffMember[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          // Cast e.target?.result to ArrayBuffer since readAsArrayBuffer is used.
+          const data = e.target?.result as ArrayBuffer;
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+          const staffMembers: StaffMember[] = json.map((row: any) => {
+            const normalizeHeader = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            const getFieldValue = (possibleHeaders: string[]) => {
+                for (const header of possibleHeaders) {
+                    const normalizedHeader = normalizeHeader(header);
+                    // Find the actual key in the row, case-insensitive and stripped of special chars
+                    const actualKey = Object.keys(row).find(k => normalizeHeader(k) === normalizedHeader);
+                    if (actualKey && row[actualKey] !== undefined && row[actualKey] !== null) {
+                        return String(row[actualKey]).trim();
+                    }
+                }
+                return undefined;
+            };
+
+            const firstName = getFieldValue(['Nombre', 'First Name', 'Primer Nombre']);
+            const lastName = getFieldValue(['Apellidos', 'Last Name']);
+            const dni = getFieldValue(['DNI', 'ID', 'Identificación']);
+            const socialSecurityNumber = getFieldValue(['SS', 'Seguridad Social', 'Numero SS', 'Social Security Number']);
+            const phone = getFieldValue(['Telefono', 'Phone', 'Movil']);
+            const role = getFieldValue(['Puesto', 'Rol', 'Role']);
+            const bankAccount = getFieldValue(['IBAN', 'Nº Cuenta', 'Cuenta Bancaria', 'Bank Account']);
+            const email = getFieldValue(['Email', 'Correo']);
+            const province = getFieldValue(['Provincia', 'Ubicacion', 'Province']);
+            let paymentTypeRaw = getFieldValue(['Tipo de Pago', 'Estado', 'Forma de Pago']);
+            const notes = getFieldValue(['Notas', 'Observaciones']);
+
+            let paymentType: PaymentType = 'Unknown';
+            if (paymentTypeRaw) {
+                const lowerCasePaymentType = paymentTypeRaw.toLowerCase();
+                if (lowerCasePaymentType.includes('cooperativa')) paymentType = 'Cooperativa';
+                else if (lowerCasePaymentType.includes('factura')) paymentType = 'Factura';
+                else if (lowerCasePaymentType.includes('alta seg. social') || lowerCasePaymentType.includes('alta seguridad social') || lowerCasePaymentType.includes('alta')) paymentType = 'Alta Seg. Social';
+                else if (lowerCasePaymentType.includes('plantilla')) paymentType = 'Plantilla';
+                else if (lowerCasePaymentType.includes('empresa')) paymentType = 'Empresa';
+                else if (lowerCasePaymentType.includes('autonomo') || lowerCasePaymentType.includes('autónomo')) paymentType = 'Autonomo';
+            }
+            
+            // Basic validation
+            if (!firstName || !dni || !role) {
+                console.warn('Skipping row due to missing required fields (Nombre, DNI, Rol):', row);
+                return null; // Skip invalid rows
+            }
+
+            return {
+              id: generateId(), // Firebase will use DNI as document ID later. This is a temporary ID.
+              firstName: firstName,
+              lastName: lastName || '', // Ensure it's a string
+              dni: dni,
+              socialSecurityNumber: socialSecurityNumber,
+              phone: phone,
+              role: role,
+              bankAccount: bankAccount,
+              email: email,
+              province: province,
+              paymentType: paymentType,
+              notes: notes,
+            };
+          }).filter(Boolean) as StaffMember[]; // Filter out nulls from skipped rows
+
+          resolve(staffMembers);
+        } catch (error) {
+          reject(new Error("Error al procesar el archivo Excel. Asegúrate de que es un archivo .xlsx válido."));
+        }
+      };
+      reader.onerror = (error) => reject(new Error("Error al leer el archivo."));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const handleUploadStaffExcel = async () => {
+      if (!isCloudConfigured || !dbInstance || !selectedExcelFile) {
+          setUploadFileMessage({ type: 'error', text: 'Firebase no está configurado o no se ha seleccionado ningún archivo.' });
+          return;
+      }
+
+      if (!confirm(`¿Estás seguro de que quieres subir el personal desde "${selectedExcelFile.name}"? Esto agregará o actualizará registros en la nube.`)) {
+          setUploadFileMessage({ type: 'info', text: 'Subida cancelada.' });
+          return;
+      }
+
+      setIsUploadingFile(true);
+      setUploadFileMessage({ type: 'info', text: 'Procesando archivo...' });
+
+      try {
+          const staffToUpload = await parseExcelStaffFile(selectedExcelFile);
+          
+          if (staffToUpload.length === 0) {
+              setUploadFileMessage({ type: 'error', text: 'No se encontraron técnicos válidos en el archivo Excel.' });
+              setIsUploadingFile(false);
+              return;
+          }
+
+          setUploadFileMessage({ type: 'info', text: `Subiendo ${staffToUpload.length} técnicos a la nube...` });
+
+          const batch = writeBatch(dbInstance);
+          let uploadedCount = 0;
+          let failedCount = 0;
+
+          for (const staffMember of staffToUpload) {
+            if (staffMember.dni) { // Use DNI as unique ID for document
+              const docRef = doc(dbInstance, 'staff', staffMember.dni);
+              batch.set(docRef, { ...staffMember, id: staffMember.dni }); // Ensure Firebase ID matches DNI
+              uploadedCount++;
+            } else {
+              failedCount++;
+              console.warn('Skipped staff member due to missing DNI for cloud upload:', staffMember);
+            }
+          }
+
+          await batch.commit();
+          setUploadFileMessage({ type: 'success', text: `¡Éxito! Se subieron ${uploadedCount} técnicos. ${failedCount > 0 ? `${failedCount} fallaron (DNI ausente).` : ''}` });
+          setSelectedExcelFile(null); // Clear selected file
+      } catch (error: any) {
+          console.error("Error al subir el personal desde Excel:", error);
+          setUploadFileMessage({ type: 'error', text: `Error al subir: ${error.message || 'Error desconocido'}` });
+      } finally {
+          setIsUploadingFile(false);
+      }
+  };
+
 
   // --- UI STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -659,25 +808,74 @@ function App() {
                                     >
                                         <Upload size={16} /> Subir todos los datos locales a la nube
                                     </button>
-                                    {/* NEW: Upload Local Staff Data Button */}
+                                    {/* Existing: Upload Local Staff Data Button */}
                                     <button 
                                         onClick={uploadLocalStaffToCloud}
                                         className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700 justify-center"
                                     >
                                         <Upload size={16} /> Subir Personal Local a la Nube
                                     </button>
-                                    <button 
-                                        onClick={uploadMockDataToCloud}
-                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-950/20 hover:bg-yellow-950/30 text-yellow-400 rounded text-sm transition-colors border border-yellow-900/30 justify-center"
-                                    >
-                                        <RefreshCw size={16} /> Cargar datos de ejemplo a la nube
-                                    </button>
-                                    <button 
-                                        onClick={disconnectCloud}
-                                        className="flex items-center gap-2 px-4 py-2 bg-red-950/20 hover:bg-red-950/30 text-red-400 rounded text-sm transition-colors border border-red-900/30 justify-center"
-                                    >
-                                        <Trash2 size={16} /> Desconectar de la nube
-                                    </button>
+
+                                    {/* NEW: Upload Staff from Excel */}
+                                    <div className="mt-6 pt-4 border-t border-zinc-800">
+                                        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                            <FileUp size={14} className="text-green-500"/>
+                                            Subir Personal desde Excel
+                                        </h4>
+                                        <p className="text-xs text-zinc-500 mb-3">
+                                            Selecciona un archivo .xlsx para agregar o actualizar el personal en la nube.
+                                            (Encabezados esperados: "Nombre", "Apellidos", "DNI", "Puesto", "Tipo de Pago", etc.)
+                                        </p>
+                                        <input 
+                                            type="file" 
+                                            accept=".xlsx" 
+                                            onChange={handleFileChange} 
+                                            className="hidden" 
+                                            id="excel-upload-input" 
+                                            disabled={isUploadingFile}
+                                        />
+                                        <label 
+                                            htmlFor="excel-upload-input" 
+                                            className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors cursor-pointer ${
+                                                isUploadingFile ? 'bg-zinc-800 text-zinc-500 border border-zinc-700' : 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20'
+                                            }`}
+                                        >
+                                            {isUploadingFile ? 'Cargando...' : selectedExcelFile ? selectedExcelFile.name : 'Seleccionar archivo Excel'}
+                                        </label>
+                                        {selectedExcelFile && !isUploadingFile && (
+                                            <button 
+                                                onClick={handleUploadStaffExcel}
+                                                className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded text-sm shadow-lg shadow-yellow-900/20 transition-colors"
+                                            >
+                                                <Upload size={16} /> Procesar y Subir
+                                            </button>
+                                        )}
+                                        {uploadFileMessage && (
+                                            <div className={`mt-3 p-3 rounded text-xs flex items-center gap-2 ${
+                                                uploadFileMessage.type === 'success' ? 'bg-green-950/20 text-green-400 border border-green-900/30' :
+                                                uploadFileMessage.type === 'error' ? 'bg-red-950/20 text-red-400 border border-red-900/30' :
+                                                'bg-blue-950/20 text-blue-400 border border-blue-900/30'
+                                            }`}>
+                                                {uploadFileMessage.text}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Existing Mock Data and Disconnect buttons */}
+                                    <div className="mt-6 pt-4 border-t border-zinc-800 flex flex-col gap-4">
+                                        <button 
+                                            onClick={uploadMockDataToCloud}
+                                            className="flex items-center gap-2 px-4 py-2 bg-yellow-950/20 hover:bg-yellow-950/30 text-yellow-400 rounded text-sm transition-colors border border-yellow-900/30 justify-center"
+                                        >
+                                            <RefreshCw size={16} /> Cargar datos de ejemplo a la nube
+                                        </button>
+                                        <button 
+                                            onClick={disconnectCloud}
+                                            className="flex items-center gap-2 px-4 py-2 bg-red-950/20 hover:bg-red-950/30 text-red-400 rounded text-sm transition-colors border border-red-900/30 justify-center"
+                                        >
+                                            <Trash2 size={16} /> Desconectar de la nube
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ) : (
