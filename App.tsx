@@ -31,6 +31,7 @@ import { LoginComponent } from './components/LoginComponent.tsx';
 import { UsersView } from './components/UsersViewComponent.tsx';
 
 // Import mock data directly for the seeding function
+// Fix: Added EVENTS_DATA import
 import { EVENTS_DATA, STAFF_DATA, USERS_DATA } from './mockData';
 import { ProductionEvent, StaffMember, AppUser } from './types';
 
@@ -164,6 +165,7 @@ function App() {
 
   const loadLocalData = () => {
     const savedEvents = localStorage.getItem('elitevision_events');
+    // Fix: Used EVENTS_DATA as default if no local data
     setEvents(savedEvents ? JSON.parse(savedEvents) : EVENTS_DATA);
 
     const savedStaff = localStorage.getItem('elitevision_staff');

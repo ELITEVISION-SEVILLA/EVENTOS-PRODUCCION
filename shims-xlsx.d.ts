@@ -1,3 +1,4 @@
+
 // shims-xlsx.d.ts
 declare module 'xlsx' {
   // Removed: import { WorkBook, WorkSheet } from 'xlsx'; // Conflicts with local declarations
@@ -44,14 +45,12 @@ declare module 'xlsx' {
   }
 
   interface WorkSheet {
-    // Index signature to allow direct access to cells by string key (e.g., 'A1')
-    [cellRef: string]: CellObject | undefined; 
+    // Fix: Broadened the index signature to allow for different types of properties on a worksheet
+    [key: string]: CellObject | string | { wch?: number; wpx?: number; hidden?: boolean }[] | { s: { r: number; c: number }; e: { r: number; c: number } }[] | undefined;
+    
     '!ref'?: string;
     '!cols'?: { wch?: number; wpx?: number; hidden?: boolean }[];
     '!merges'?: { s: { r: number; c: number }; e: { r: number; c: number } }[];
-    // Removed the overly broad index signature which allowed string and other types at arbitrary keys,
-    // as it conflicts with the primary use of cells as CellObject.
-    // [key: string]: CellObject | string | { wch?: number; wpx?: number; hidden?: boolean }[] | { s: { r: number; c: number; }; e: { r: number; c: number; }; }[] | undefined;
   }
 
   interface WorkBook {
