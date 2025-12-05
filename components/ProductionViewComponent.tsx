@@ -1,31 +1,28 @@
 
 import React, { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Calendar, Users, CreditCard, ChevronDown, ChevronUp, User, MapPin, Plus, Pencil, Download, Image, FileText, CheckSquare, Square, X, Trash2 } from 'lucide-react'; // Added Trash2
+import { Calendar, Users, CreditCard, ChevronDown, ChevronUp, User, MapPin, Plus, Pencil, Download, Image, FileText, CheckSquare, Square, X, Trash2, Sheet } from 'lucide-react';
 import { ProductionEvent, TechnicianShift, StaffMember } from '../types';
 import html2canvas from 'html2canvas';
+import * as XLSX from 'xlsx';
 
 interface ProductionViewProps {
   events: ProductionEvent[];
   onCreateEvent: () => void;
   onEditEvent: (event: ProductionEvent) => void;
-  onDeleteEvent: (eventId: string) => void; // New prop for deleting events
+  onDeleteEvent: (eventId: string) => void; 
   staffList: StaffMember[];
 }
 
 const RoleBadge = ({ role }: { role: string }) => {
   let colorClass = 'bg-zinc-800 text-zinc-400 border-zinc-700';
   
-  // Re-mapping colors to Corporate/Gold scale
-  // Core Technical Roles -> Gold/Yellow
   if (role.toLowerCase().includes('camara') || role.toLowerCase().includes('tecnico') || role.toLowerCase().includes('realizador')) {
     colorClass = 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30';
   } 
-  // Leadership Roles -> White/Strong
   else if (role.toLowerCase().includes('jefe') || role.toLowerCase().includes('produccion')) {
     colorClass = 'bg-zinc-100 text-zinc-900 border-zinc-300 font-bold';
   } 
-  // Support Roles -> Zinc/Gray
   else if (role.toLowerCase().includes('auxiliar') || role.toLowerCase().includes('asistente')) {
     colorClass = 'bg-zinc-800 text-zinc-300 border-zinc-600';
   }
@@ -37,7 +34,7 @@ const RoleBadge = ({ role }: { role: string }) => {
   );
 };
 
-// Column Definitions for Export
+// Column Definitions for PDF/PNG Export (Visual)
 const EXPORT_COLUMNS = [
     { key: 'role', label: 'Puesto' },
     { key: 'personName', label: 'Nombre Completo' },
@@ -57,8 +54,8 @@ const EventCard: React.FC<{
     event: ProductionEvent; 
     onEdit: (e: ProductionEvent) => void;
     onExportClick: (e: ProductionEvent) => void; 
-    onDelete: (eventId: string) => void; // New prop for deleting an event
-}> = ({ event, onEdit, onExportClick, onDelete }) => { // Destructure onDelete
+    onDelete: (eventId: string) => void; 
+}> = ({ event, onEdit, onExportClick, onDelete }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const totalCost = event.shifts.reduce((sum, shift) => sum + (shift.totalInvoiceAmount || shift.agreedSalary || 0), 0);
@@ -185,7 +182,7 @@ const EventCard: React.FC<{
   );
 };
 
-export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreateEvent, onEditEvent, onDeleteEvent, staffList }) => { // Destructure onDeleteEvent
+export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreateEvent, onEditEvent, onDeleteEvent, staffList }) => { 
   const sortedEvents = [...events].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -218,6 +215,77 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
            return staffMember[key] ? String(staffMember[key]) : '';
       }
       return '';
+  };
+
+  const exportAllToExcel = () => {
+    if (!confirm("¿Exportar todos los eventos a Excel?")) return;
+
+    try {
+        const wb = XLSX.utils.book_new();
+        const rows: any[][] = [];
+
+        // Build array of arrays (AoA) based on the image format
+        // Group by Event
+        sortedEvents.forEach(event => {
+            // Header Row for Event: "Event Title (Date)"
+            const headerTitle = `${event.title} (${format(parseISO(event.date), 'dd/MM/yyyy')})`;
+            rows.push([headerTitle]); // A1 equivalent
+
+            // Headers Row
+            // A: Puesto, B: Nombre, C: DNI, D: Alta Seg. Social, E: Sueldo, F: Observación, G: Jornada
+            rows.push(['Puesto', 'Nombre', 'DNI', 'Alta Seg. Social', 'Sueldo', 'Observación', 'Jornada']);
+
+            // Data Rows
+            event.shifts.forEach(shift => {
+                let ssCell = '-';
+                if (shift.paymentType === 'Alta Seg. Social') {
+                    ssCell = shift.socialSecurityNumber ? `Si (${shift.socialSecurityNumber})` : 'Si';
+                } else if (shift.paymentType === 'Cooperativa') {
+                    ssCell = 'No';
+                }
+
+                const salaryCell = shift.agreedSalary ? `${shift.agreedSalary} €` : '-';
+                
+                // Combine notes and invoice info
+                const invoiceInfo = shift.invoiceNumber ? `Llegó Fact. ${shift.invoiceNumber}` : '';
+                const totalInvoiceInfo = shift.totalInvoiceAmount ? `(Total ${shift.totalInvoiceAmount.toFixed(2)}€)` : '';
+                const combinedNotes = [shift.notes, invoiceInfo, totalInvoiceInfo].filter(Boolean).join(' ');
+
+                rows.push([
+                    shift.role,
+                    shift.personName,
+                    shift.dni,
+                    ssCell,
+                    salaryCell,
+                    combinedNotes || shift.paymentType,
+                    shift.schedule
+                ]);
+            });
+
+            // Empty row spacer between events
+            rows.push([]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+
+        // Define column widths
+        ws['!cols'] = [
+            { wch: 25 }, // Puesto
+            { wch: 35 }, // Nombre
+            { wch: 12 }, // DNI
+            { wch: 20 }, // SS
+            { wch: 10 }, // Sueldo
+            { wch: 40 }, // Observacion
+            { wch: 15 }  // Jornada
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, "Producción Completa");
+        XLSX.writeFile(wb, `EliteVision_Backup_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+
+    } catch (e) {
+        console.error("Error exporting excel", e);
+        alert("Hubo un error al generar el Excel.");
+    }
   };
 
   const performExport = async () => {
@@ -272,15 +340,24 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
       <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
         <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3 uppercase">
           <Calendar className="text-yellow-500" size={28} />
-          Eventos {/* Changed from Calendario to Eventos */}
+          Eventos
         </h2>
         
-        <button 
-          onClick={onCreateEvent}
-          className="bg-yellow-500 hover:bg-yellow-400 text-black border border-yellow-500 px-6 py-2.5 rounded text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-yellow-900/20 uppercase tracking-wide"
-        >
-          <Plus size={18} /> Nuevo Evento
-        </button>
+        <div className="flex gap-2">
+            <button 
+                onClick={exportAllToExcel}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 px-4 py-2.5 rounded text-xs font-bold transition-all flex items-center gap-2 uppercase tracking-wide"
+                title="Descargar copia de seguridad en Excel"
+            >
+                <Sheet size={18} className="text-green-500" /> Exportar Excel
+            </button>
+            <button 
+            onClick={onCreateEvent}
+            className="bg-yellow-500 hover:bg-yellow-400 text-black border border-yellow-500 px-6 py-2.5 rounded text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-yellow-900/20 uppercase tracking-wide"
+            >
+            <Plus size={18} /> Nuevo Evento
+            </button>
+        </div>
       </div>
       
       <div className="grid gap-4">
@@ -290,7 +367,7 @@ export const ProductionView: React.FC<ProductionViewProps> = ({ events, onCreate
             event={event} 
             onEdit={onEditEvent}
             onExportClick={handleExportClick} 
-            onDelete={onDeleteEvent} // Pass the delete handler
+            onDelete={onDeleteEvent} 
           />
         ))}
       </div>

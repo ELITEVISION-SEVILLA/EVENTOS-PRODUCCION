@@ -1,6 +1,6 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -17,7 +17,8 @@ import {
   Trash2,
   Upload,
   LogOut,
-  Shield
+  Shield,
+  HardDrive
 } from 'lucide-react';
 
 // Imported with .tsx extension to fix module resolution issues in Vercel/CI
@@ -55,6 +56,21 @@ function App() {
   const [events, setEvents] = useState<ProductionEvent[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+
+  // Auto-Save State
+  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  
+  // Refs for Auto-Save (to access current state inside interval)
+  const eventsRef = useRef(events);
+  const staffRef = useRef(staff);
+  const usersRef = useRef(users);
+
+  // Update refs when state changes
+  useEffect(() => {
+    eventsRef.current = events;
+    staffRef.current = staff;
+    usersRef.current = users;
+  }, [events, staff, users]);
   
   // --- INITIALIZATION LOGIC ---
 
@@ -117,6 +133,33 @@ function App() {
 
     checkCloud();
   }, []); // Run once on mount
+
+  // --- AUTO-SAVE INTERVAL ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Run every 5 minutes (300,000 ms)
+    const intervalId = setInterval(() => {
+      console.log("Ejecutando auto-guardado de seguridad...");
+      
+      const backupData = {
+        events: eventsRef.current,
+        staff: staffRef.current,
+        users: usersRef.current,
+        timestamp: new Date().toISOString(),
+        version: '3.0'
+      };
+      
+      try {
+        localStorage.setItem('elitevision_autosave_backup', JSON.stringify(backupData));
+        setLastAutoSave(new Date());
+      } catch (e) {
+        console.error("Error en auto-guardado", e);
+      }
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [currentUser]);
 
   const loadLocalData = () => {
     const savedEvents = localStorage.getItem('elitevision_events');
@@ -431,7 +474,7 @@ function App() {
           <div className="flex items-center gap-6">
              <div className="flex items-center text-zinc-500 text-sm">
                 <span className="bg-yellow-500/10 text-yellow-500 px-3 py-1 rounded text-xs border border-yellow-500/20 mr-2 uppercase tracking-wider font-bold">
-                  v3.0 Cloud
+                  v3.1 Beta
                 </span>
              </div>
              
@@ -444,6 +487,14 @@ function App() {
                 {isCloudConfigured ? <Cloud size={14} className="text-yellow-500"/> : <CloudOff size={14} />}
                 <span>{isCloudConfigured ? 'SINCRONIZADO' : 'LOCAL'}</span>
              </div>
+
+             {/* Auto Save Status */}
+             {lastAutoSave && (
+                <div className="hidden md:flex items-center gap-2 text-[10px] text-zinc-600">
+                    <HardDrive size={12} className="text-zinc-600" />
+                    <span>Guardado auto: {lastAutoSave.toLocaleTimeString()}</span>
+                </div>
+             )}
           </div>
 
           <div className="flex items-center gap-6">
