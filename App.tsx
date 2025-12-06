@@ -18,7 +18,8 @@ import {
   LogOut,
   Shield,
   RefreshCw,
-  HardDrive
+  HardDrive,
+  CheckCircle2
 } from 'lucide-react';
 
 // Imported with .tsx extension to fix module resolution issues in Vercel/CI
@@ -141,21 +142,20 @@ function App() {
 
     // Run every 5 minutes (300,000 ms)
     const intervalId = setInterval(() => {
-      console.log("Ejecutando auto-guardado de seguridad...");
-      
+      // Local storage backup just in case
       const backupData = {
         events: eventsRef.current,
         staff: staffRef.current,
         users: usersRef.current,
         timestamp: new Date().toISOString(),
-        version: '3.1 Beta' // Updated version for auto-save
+        version: '3.1 Beta'
       };
       
       try {
         localStorage.setItem('elitevision_autosave_backup', JSON.stringify(backupData));
         setLastAutoSave(new Date());
       } catch (e) {
-        console.error("Error en auto-guardado", e);
+        console.error("Error en auto-guardado local", e);
       }
     }, 5 * 60 * 1000);
 
@@ -317,93 +317,39 @@ function App() {
       }
   };
 
-  const uploadLocalDataToCloud = async () => {
+  const cargarDatosIniciales = async () => {
       if (!isCloudConfigured || !dbInstance) return;
-      if (!confirm("Esto sobrescribirá los datos en la nube con los datos locales actuales de este navegador (Eventos, Personal y Usuarios). ¿Continuar?")) return;
+      if (!confirm("⚠️ ATENCIÓN: Esta acción está diseñada para la PRIMERA CARGA.\n\nSubirá todos los datos locales (Personal, Eventos y Usuarios) a Firebase.\n\n¿Estás seguro de que quieres inicializar la base de datos?")) return;
 
       const batch = writeBatch(dbInstance);
       
-      // Load local raw data from localStorage
-      const localEvents = JSON.parse(localStorage.getItem('elitevision_events') || '[]');
-      const localStaff = JSON.parse(localStorage.getItem('elitevision_staff') || '[]');
-      const localUsers = JSON.parse(localStorage.getItem('elitevision_users') || '[]');
-
-      localEvents.forEach((e: ProductionEvent) => {
-          const ref = doc(dbInstance, 'events', e.id);
-          batch.set(ref, e);
-      });
-
-      localStaff.forEach((s: StaffMember) => {
-          const ref = doc(dbInstance, 'staff', s.id);
-          batch.set(ref, s);
-      });
-
-      localUsers.forEach((u: AppUser) => {
-          const ref = doc(dbInstance, 'users', u.id);
-          batch.set(ref, u);
-      });
-
-      try {
-          await batch.commit();
-          alert("Sincronización completada: Datos locales subidos a la nube.");
-      } catch (error) {
-          console.error("Error al subir datos locales a la nube:", error);
-          alert("Error al subir datos locales a la nube. Revisa la consola para más detalles.");
-      }
-  };
-
-  const uploadLocalStaffToCloud = async () => {
-      if (!isCloudConfigured || !dbInstance) return;
-      if (!confirm("Esto sobrescribirá la base de datos de PERSONAL en la nube con los datos locales actuales de este navegador. ¿Continuar?")) return;
-
-      const batch = writeBatch(dbInstance);
-      const localStaff = JSON.parse(localStorage.getItem('elitevision_staff') || '[]');
-
-      localStaff.forEach((s: StaffMember) => {
-          const ref = doc(dbInstance, 'staff', s.id);
-          batch.set(ref, s);
-      });
-
-      try {
-          await batch.commit();
-          alert("Sincronización de personal completada: Datos locales subidos a la nube.");
-      } catch (error) {
-          console.error("Error al subir personal local a la nube:", error);
-          alert("Error al subir personal local a la nube. Revisa la consola para más detalles.");
-      }
-  };
-
-  const uploadMockDataToCloud = async () => {
-      if (!isCloudConfigured || !dbInstance) return;
-      if (!confirm("¡Atención! Esto sobrescribirá *todos* los datos de Eventos, Personal y Usuarios en la nube con los datos de ejemplo predeterminados. ¿Continuar?")) return;
-
-      const batch = writeBatch(dbInstance);
-      
-      // Use the mock data directly from the imports
-      EVENTS_DATA.forEach((e: ProductionEvent) => {
-          const ref = doc(dbInstance, 'events', e.id);
-          batch.set(ref, e);
-      });
-
-      STAFF_DATA.forEach((s: StaffMember) => {
-          // Use DNI as ID if available, otherwise fallback to generated ID
-          const docId = s.dni || s.id;
-          const ref = doc(dbInstance, 'staff', docId);
-          // Ensure the ID in the data matches the document ID
-          batch.set(ref, { ...s, id: docId });
-      });
-
+      // 1. Cargar Usuarios
       USERS_DATA.forEach((u: AppUser) => {
           const ref = doc(dbInstance, 'users', u.id);
           batch.set(ref, u);
       });
 
+      // 2. Cargar Eventos
+      EVENTS_DATA.forEach((e: ProductionEvent) => {
+          const ref = doc(dbInstance, 'events', e.id);
+          batch.set(ref, e);
+      });
+
+      // 3. Cargar Personal (STAFF_DATA contiene todo el listado del Excel)
+      STAFF_DATA.forEach((s: StaffMember) => {
+          // Usamos el DNI como ID preferente para evitar duplicados si ya existe
+          const docId = s.dni && s.dni.trim() !== '' ? s.dni : s.id;
+          const ref = doc(dbInstance, 'staff', docId);
+          // Aseguramos que el ID guardado coincida con el del documento
+          batch.set(ref, { ...s, id: docId });
+      });
+
       try {
           await batch.commit();
-          alert("Sincronización completada: Datos de ejemplo cargados a la nube.");
+          alert("¡Éxito! La base de datos en la nube ha sido inicializada con todos los datos.");
       } catch (error) {
-          console.error("Error al cargar datos de ejemplo a la nube:", error);
-          alert("Error al cargar datos de ejemplo a la nube. Revisa la consola para más detalles.");
+          console.error("Error al cargar datos iniciales:", error);
+          alert("Error al cargar datos. Abre la consola para ver detalles (F12).");
       }
   };
 
@@ -644,45 +590,39 @@ function App() {
                         </h3>
                         
                         {isCloudConfigured ? (
-                            <div className="space-y-4">
-                                <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-lg flex items-center gap-3 text-yellow-500">
-                                    <Cloud size={24} />
+                            <div className="space-y-6">
+                                <div className="p-6 bg-zinc-950 border border-yellow-500/20 rounded-lg flex items-start gap-4">
+                                    <div className="bg-yellow-500/10 p-3 rounded-full">
+                                        <CheckCircle2 size={32} className="text-yellow-500" />
+                                    </div>
                                     <div>
-                                        <div className="font-bold">Conectado a Google Firebase</div>
-                                        <div className="text-sm text-zinc-400">Tus datos se guardan en la nube en tiempo real.</div>
+                                        <div className="font-bold text-white text-lg">Conectado a Google Firebase</div>
+                                        <div className="text-sm text-zinc-400 mt-1 leading-relaxed">
+                                            Tu base de datos está sincronizada en tiempo real. 
+                                            Todos los eventos, personal y usuarios nuevos que crees se guardarán automáticamente en la nube.
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex flex-col gap-4">
-                                    {/* Existing Upload All Data Button */}
+                                
+                                <div className="p-4 bg-zinc-800/30 border border-zinc-700/50 rounded text-center text-xs text-zinc-500 uppercase tracking-widest font-medium">
+                                    Sincronización Automática Activada
+                                </div>
+
+                                {/* Seeding Button for Initial Load */}
+                                <div className="mt-4 pt-4 border-t border-zinc-800">
                                     <button 
-                                        onClick={uploadLocalDataToCloud}
-                                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700 justify-center"
+                                        onClick={cargarDatosIniciales}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors border border-zinc-700 font-medium text-sm mb-4"
                                     >
-                                        <Upload size={16} /> Subir todos los datos locales a la nube
+                                        <Upload size={16} /> Inicializar Nube con Datos Locales (Solo primera vez)
                                     </button>
-                                    {/* Existing: Upload Local Staff Data Button */}
+
                                     <button 
-                                        onClick={uploadLocalStaffToCloud}
-                                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-200 transition-colors border border-zinc-700 justify-center"
+                                        onClick={disconnectCloud}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-950/20 hover:bg-red-950/30 text-red-400 rounded transition-colors border border-red-900/30 font-medium"
                                     >
-                                        <Upload size={16} /> Subir Personal Local a la Nube
+                                        <Trash2 size={18} /> Desconectar de la nube
                                     </button>
-                                    
-                                    {/* Existing Mock Data and Disconnect buttons */}
-                                    <div className="mt-6 pt-4 border-t border-zinc-800 flex flex-col gap-4">
-                                        <button 
-                                            onClick={uploadMockDataToCloud}
-                                            className="flex items-center gap-2 px-4 py-2 bg-yellow-950/20 hover:bg-yellow-950/30 text-yellow-400 rounded text-sm transition-colors border border-yellow-900/30 justify-center"
-                                        >
-                                            <RefreshCw size={16} /> Cargar datos de ejemplo a la nube
-                                        </button>
-                                        <button 
-                                            onClick={disconnectCloud}
-                                            className="flex items-center gap-2 px-4 py-2 bg-red-950/20 hover:bg-red-950/30 text-red-400 rounded text-sm transition-colors border border-red-900/30 justify-center"
-                                        >
-                                            <Trash2 size={16} /> Desconectar de la nube
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         ) : (
